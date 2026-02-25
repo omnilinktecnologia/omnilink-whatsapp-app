@@ -4,9 +4,21 @@
 
 @layer base {
   * { @apply border-gray-200; }
-  body { @apply bg-gray-50 text-gray-900; }
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
 }
+
+/* Scrollbar styling */
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
 
 /* React Flow */
 .react-flow__node { font-family: inherit; }
 .react-flow__edge-path { stroke-width: 2; }
+
+/* Smooth transitions for interactive elements */
+@layer utilities {
+  .transition-smooth { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+}

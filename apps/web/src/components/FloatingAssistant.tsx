@@ -6,6 +6,7 @@ import {
   Bot, X, Send, RotateCcw, Loader2, Sparkles,
   LayoutDashboard, Smartphone, Users, List,
   FolderOpen, GitBranch, Megaphone, Compass,
+  BarChart3, Zap, CheckCircle, AlertCircle,
 } from 'lucide-react'
 
 // ── Page context map ──────────────────────────────────────────────────────────
@@ -14,62 +15,66 @@ const PAGE_CONTEXT: Record<string, { label: string; suggestions: string[] }> = {
   '/': {
     label: 'Dashboard',
     suggestions: [
-      'O que significam os números no dashboard?',
-      'Por onde devo começar?',
-      'Me explique o fluxo completo da plataforma',
+      'Mostre as métricas da plataforma',
+      'Crie uma jornada de boas-vindas para novos contatos',
+      'Quais campanhas estão ativas?',
     ],
   },
   '/senders': {
     label: 'Números WhatsApp',
     suggestions: [
-      'Como adiciono um número aqui?',
-      'O que é o campo Twilio From?',
-      'Onde encontro o "From" no console da Twilio?',
+      'Quais números estão cadastrados?',
+      'Como configuro um número na Twilio?',
     ],
   },
   '/contacts': {
     label: 'Contatos',
     suggestions: [
+      'Quantos contatos tenho cadastrados?',
       'Como importar contatos via CSV?',
-      'Qual formato usar no número de telefone?',
-      'Posso editar um contato depois de importado?',
     ],
   },
   '/lists': {
     label: 'Listas',
     suggestions: [
-      'Para que serve uma lista?',
-      'Como adiciono contatos a uma lista?',
-      'Uma lista pode ser usada em várias campanhas?',
+      'Quais listas existem e quantos contatos cada uma tem?',
+      'Para que servem as listas?',
     ],
   },
   '/templates': {
     label: 'Templates',
     suggestions: [
-      'Como criar um template de mensagem?',
-      'O que é necessário para aprovação?',
-      'Como importar templates da Twilio?',
+      'Quais templates estão aprovados?',
+      'Como criar um template novo?',
     ],
   },
   '/journeys': {
     label: 'Jornadas',
     suggestions: [
-      'Como criar minha primeira jornada?',
-      'Qual a diferença entre Business e User Initiated?',
-      'Me explique os tipos de bloco disponíveis',
+      'Crie uma jornada de NPS com pergunta e condição',
+      'Quais jornadas existem?',
+      'Crie uma jornada de follow-up de vendas',
     ],
   },
   '/campaigns': {
     label: 'Campanhas',
     suggestions: [
-      'Como lançar uma campanha agora?',
-      'Quais são os pré-requisitos para criar uma campanha?',
-      'Como acompanho o progresso do envio?',
+      'Crie uma campanha com a última jornada publicada',
+      'Qual o status das campanhas?',
+      'Lance a campanha mais recente',
+    ],
+  },
+  '/analytics': {
+    label: 'Analytics',
+    suggestions: [
+      'Mostre um resumo das métricas',
+      'Qual a taxa de entrega?',
+      'Como melhorar a taxa de resposta?',
     ],
   },
 }
 
-// ── Quick tour prompts ────────────────────────────────────────────────────────
+// ── Tour prompts ──────────────────────────────────────────────────────────────
 
 const TOUR_PROMPTS = [
   { label: 'Dashboard', path: '/', icon: LayoutDashboard },
@@ -79,6 +84,7 @@ const TOUR_PROMPTS = [
   { label: 'Templates', path: '/templates', icon: FolderOpen },
   { label: 'Jornadas',  path: '/journeys',  icon: GitBranch },
   { label: 'Campanhas', path: '/campaigns', icon: Megaphone },
+  { label: 'Analytics', path: '/analytics', icon: BarChart3 },
 ]
 
 // ── Markdown renderer ─────────────────────────────────────────────────────────
@@ -120,7 +126,6 @@ function renderMarkdown(text: string, onNavigate: (path: string) => void): React
 }
 
 function renderInline(text: string, onNavigate: (path: string) => void): React.ReactNode {
-  // Match **bold**, *italic*, `code`, [label](/path) nav links
   const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[[^\]]+\]\(\/[^)]+\))/g)
   return (
     <>
@@ -131,7 +136,6 @@ function renderInline(text: string, onNavigate: (path: string) => void): React.R
           return <em key={i}>{part.slice(1, -1)}</em>
         if (part.startsWith('`') && part.endsWith('`'))
           return <code key={i} className="bg-black/10 rounded px-1 text-[11px] font-mono">{part.slice(1, -1)}</code>
-        // Navigation link: [label](/path)
         const navMatch = part.match(/^\[([^\]]+)\]\((\/[^)]+)\)$/)
         if (navMatch) {
           return (
@@ -150,12 +154,49 @@ function renderInline(text: string, onNavigate: (path: string) => void): React.R
   )
 }
 
+// ── Action labels ─────────────────────────────────────────────────────────────
+
+const ACTION_LABELS: Record<string, { label: string; icon: any; color: string }> = {
+  list_journeys:       { label: 'Consultando jornadas',     icon: GitBranch,  color: 'text-purple-600 bg-purple-50' },
+  create_journey:      { label: 'Criando jornada',          icon: Zap,        color: 'text-blue-600 bg-blue-50' },
+  publish_journey:     { label: 'Publicando jornada',       icon: CheckCircle, color: 'text-green-600 bg-green-50' },
+  list_templates:      { label: 'Consultando templates',    icon: FolderOpen, color: 'text-orange-600 bg-orange-50' },
+  list_senders:        { label: 'Consultando números',      icon: Smartphone, color: 'text-teal-600 bg-teal-50' },
+  list_contacts:       { label: 'Consultando contatos',     icon: Users,      color: 'text-blue-600 bg-blue-50' },
+  list_contact_lists:  { label: 'Consultando listas',       icon: List,       color: 'text-indigo-600 bg-indigo-50' },
+  create_campaign:     { label: 'Criando campanha',         icon: Megaphone,  color: 'text-orange-600 bg-orange-50' },
+  launch_campaign:     { label: 'Lançando campanha',        icon: Zap,        color: 'text-green-600 bg-green-50' },
+  list_campaigns:      { label: 'Consultando campanhas',    icon: Megaphone,  color: 'text-orange-600 bg-orange-50' },
+  get_analytics:       { label: 'Obtendo analytics',        icon: BarChart3,  color: 'text-blue-600 bg-blue-50' },
+}
+
+// ── Action badge component ────────────────────────────────────────────────────
+
+function ActionBadge({ action, result }: { action: string; result?: any }) {
+  const info = ACTION_LABELS[action] ?? { label: action, icon: Zap, color: 'text-gray-600 bg-gray-50' }
+  const Icon = info.icon
+  const hasError = result?.error
+  const isSuccess = result?.success
+
+  return (
+    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border ${
+      hasError ? 'bg-red-50 text-red-700 border-red-200' :
+      isSuccess ? 'bg-green-50 text-green-700 border-green-200' :
+      `${info.color} border-current/20`
+    }`}>
+      {hasError ? <AlertCircle size={13} /> : isSuccess ? <CheckCircle size={13} /> : <Icon size={13} />}
+      <span>{hasError ? `Erro: ${result.error}` : isSuccess ? result.message ?? info.label : info.label}</span>
+    </div>
+  )
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Message {
   role: 'user' | 'assistant'
   content: string
   isAction?: boolean
+  actions?: Array<{ name: string; result?: any }>
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -197,7 +238,8 @@ export default function FloatingAssistant() {
     setStreaming(true)
     setShowTourMenu(false)
 
-    setMessages(prev => [...prev, { role: 'assistant', content: '' }])
+    const pendingActions: Array<{ name: string; result?: any }> = []
+    setMessages(prev => [...prev, { role: 'assistant', content: '', actions: [] }])
 
     const abort = new AbortController()
     abortRef.current = abort
@@ -214,7 +256,7 @@ export default function FloatingAssistant() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          messages: newMessages,
+          messages: newMessages.map(m => ({ role: m.role, content: m.content })),
           current_page: pathname,
           page_label: pageCtx.label,
         }),
@@ -241,11 +283,43 @@ export default function FloatingAssistant() {
           try {
             const parsed = JSON.parse(data)
             if (parsed.error) throw new Error(parsed.error)
+
+            if (parsed.action && !parsed.action_result) {
+              pendingActions.push({ name: parsed.action })
+              setMessages(prev => {
+                const updated = [...prev]
+                updated[updated.length - 1] = {
+                  role: 'assistant',
+                  content: accumulated,
+                  actions: [...pendingActions],
+                }
+                return updated
+              })
+            }
+
+            if (parsed.action_result) {
+              const idx = pendingActions.findIndex(a => a.name === parsed.action_result && !a.result)
+              if (idx !== -1) pendingActions[idx].result = parsed.result
+              setMessages(prev => {
+                const updated = [...prev]
+                updated[updated.length - 1] = {
+                  role: 'assistant',
+                  content: accumulated,
+                  actions: [...pendingActions],
+                }
+                return updated
+              })
+            }
+
             if (parsed.delta) {
               accumulated += parsed.delta
               setMessages(prev => {
                 const updated = [...prev]
-                updated[updated.length - 1] = { role: 'assistant', content: accumulated }
+                updated[updated.length - 1] = {
+                  role: 'assistant',
+                  content: accumulated,
+                  actions: pendingActions.length > 0 ? [...pendingActions] : undefined,
+                }
                 return updated
               })
             }
@@ -278,7 +352,7 @@ export default function FloatingAssistant() {
 
   function startTourPage(path: string, label: string) {
     if (pathname !== path) router.push(path)
-    sendMessage(`Estou na página "${label}". Me explique interativamente o que posso fazer aqui e como usar cada funcionalidade, incluindo links para navegar quando relevante.`, true)
+    sendMessage(`Estou na página "${label}". Me explique interativamente o que posso fazer aqui.`, true)
   }
 
   const isEmpty = messages.length === 0
@@ -288,28 +362,28 @@ export default function FloatingAssistant() {
       {/* Floating Button */}
       <button
         onClick={() => setOpen(v => !v)}
-        className={`fixed bottom-6 right-6 z-50 w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-all duration-200 ${
-          open ? 'bg-slate-700 hover:bg-slate-800' : 'bg-blue-600 hover:bg-blue-700 hover:scale-105'
+        className={`fixed bottom-6 right-6 z-50 w-13 h-13 rounded-full shadow-lg flex items-center justify-center transition-all duration-200 ${
+          open ? 'bg-slate-700 hover:bg-slate-800 scale-90' : 'bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 hover:scale-105 hover:shadow-xl'
         }`}
-        title="Assistente Omnilink"
+        title="Copilot Omnilink"
       >
-        {open ? <X size={20} className="text-white" /> : <Bot size={20} className="text-white" />}
+        {open ? <X size={20} className="text-white" /> : <Sparkles size={20} className="text-white" />}
       </button>
 
       {/* Panel */}
       {open && (
-        <div className="fixed bottom-20 right-6 z-50 w-[390px] max-h-[620px] bg-white rounded-2xl shadow-2xl border border-slate-100 flex flex-col overflow-hidden">
+        <div className="fixed bottom-20 right-6 z-50 w-[420px] max-h-[650px] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
 
           {/* Header */}
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-3 flex items-center justify-between flex-shrink-0">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-white/20 rounded-full flex items-center justify-center">
-                <Sparkles size={14} className="text-white" />
+          <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 px-4 py-3 flex items-center justify-between flex-shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
+                <Sparkles size={16} className="text-white" />
               </div>
               <div>
-                <p className="text-white text-sm font-semibold leading-none">Assistente Omnilink</p>
+                <p className="text-white text-sm font-semibold leading-none">Copilot Omnilink</p>
                 <p className="text-blue-200 text-[11px] mt-0.5">
-                  {pageCtx.label !== 'Plataforma' ? `Página atual: ${pageCtx.label}` : 'powered by ChatGPT'}
+                  {pageCtx.label !== 'Plataforma' ? `${pageCtx.label}` : 'IA que executa por você'}
                 </p>
               </div>
             </div>
@@ -329,7 +403,7 @@ export default function FloatingAssistant() {
             </div>
           </div>
 
-          {/* Tour menu strip */}
+          {/* Tour strip */}
           <div className="border-b border-slate-100 bg-slate-50 px-3 py-2 flex-shrink-0">
             <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
               <button
@@ -363,7 +437,7 @@ export default function FloatingAssistant() {
           {/* Tour dropdown */}
           {showTourMenu && (
             <div className="border-b border-slate-100 bg-blue-50 px-4 py-3 flex-shrink-0">
-              <p className="text-xs font-semibold text-blue-700 mb-2">Tour interativo — escolha uma seção:</p>
+              <p className="text-xs font-semibold text-blue-700 mb-2">Tour interativo:</p>
               <div className="grid grid-cols-2 gap-1.5">
                 {TOUR_PROMPTS.map(({ label, path, icon: Icon }) => (
                   <button
@@ -382,22 +456,20 @@ export default function FloatingAssistant() {
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
             {isEmpty ? (
               <div className="space-y-4">
-                {/* Welcome */}
                 <div className="flex items-start gap-2">
-                  <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <Bot size={13} className="text-blue-600" />
+                  <div className="w-6 h-6 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Sparkles size={12} className="text-blue-600" />
                   </div>
                   <div className="bg-slate-50 rounded-xl rounded-tl-none px-3 py-2.5 text-sm text-slate-700 leading-relaxed">
-                    Olá! Sou o assistente da Omnilink. Posso te guiar pela plataforma de forma interativa, navegar entre as páginas enquanto explico, ou responder qualquer dúvida.
+                    Olá! Sou o <strong>Copilot da Omnilink</strong>. Posso <strong>criar jornadas</strong>, <strong>lançar campanhas</strong> e <strong>consultar métricas</strong> diretamente — além de guiar você pela plataforma.
                     <br /><br />
-                    Use os botões acima para iniciar um tour por qualquer seção, ou me pergunte algo diretamente.
+                    Experimente: <em>"Crie uma jornada de NPS"</em> ou <em>"Qual a taxa de entrega?"</em>
                   </div>
                 </div>
 
-                {/* Contextual suggestions */}
                 {pageCtx.suggestions.length > 0 && (
                   <div className="pl-8 space-y-1.5">
-                    <p className="text-xs text-slate-400 font-medium">Sugestões para {pageCtx.label}:</p>
+                    <p className="text-xs text-slate-400 font-medium">Sugestões:</p>
                     {pageCtx.suggestions.map(q => (
                       <button
                         key={q}
@@ -414,32 +486,45 @@ export default function FloatingAssistant() {
               messages.map((msg, i) => (
                 <div key={i} className={`flex items-start gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
                   {msg.role === 'assistant' && (
-                    <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                      {msg.content === '' && streaming
+                    <div className="w-6 h-6 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                      {msg.content === '' && streaming && !msg.actions?.length
                         ? <Loader2 size={12} className="text-blue-600 animate-spin" />
-                        : <Bot size={13} className="text-blue-600" />
+                        : <Sparkles size={12} className="text-blue-600" />
                       }
                     </div>
                   )}
-                  <div className={`max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed ${
-                    msg.role === 'user'
-                      ? msg.isAction
-                        ? 'bg-blue-50 border border-blue-200 text-blue-700 rounded-tr-none text-xs italic'
-                        : 'bg-blue-600 text-white rounded-tr-none whitespace-pre-wrap'
-                      : 'bg-slate-50 text-slate-700 rounded-tl-none'
-                  }`}>
-                    {msg.role === 'user'
-                      ? msg.content
-                      : msg.content
-                        ? renderMarkdown(msg.content, navigate)
-                        : streaming && i === messages.length - 1
-                          ? <span className="inline-flex gap-1">
-                              <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                              <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                              <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                            </span>
-                          : ''
-                    }
+                  <div className={`max-w-[85%] ${msg.role === 'user' ? '' : ''}`}>
+                    {/* Action badges */}
+                    {msg.actions && msg.actions.length > 0 && (
+                      <div className="flex flex-col gap-1.5 mb-2">
+                        {msg.actions.map((a, ai) => (
+                          <ActionBadge key={ai} action={a.name} result={a.result} />
+                        ))}
+                      </div>
+                    )}
+                    {/* Message content */}
+                    <div className={`rounded-xl px-3 py-2 text-sm leading-relaxed ${
+                      msg.role === 'user'
+                        ? msg.isAction
+                          ? 'bg-blue-50 border border-blue-200 text-blue-700 rounded-tr-none text-xs italic'
+                          : 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-tr-none whitespace-pre-wrap'
+                        : 'bg-slate-50 text-slate-700 rounded-tl-none'
+                    }`}>
+                      {msg.role === 'user'
+                        ? msg.content
+                        : msg.content
+                          ? renderMarkdown(msg.content, navigate)
+                          : streaming && i === messages.length - 1
+                            ? msg.actions?.length
+                              ? <span className="text-xs text-slate-400 italic">Processando ações...</span>
+                              : <span className="inline-flex gap-1">
+                                  <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                  <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                  <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                </span>
+                            : ''
+                      }
+                    </div>
                   </div>
                 </div>
               ))
@@ -470,7 +555,7 @@ export default function FloatingAssistant() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Pergunte algo ou peça para navegar..."
+                placeholder="Peça para criar uma jornada, lançar campanha..."
                 rows={1}
                 disabled={streaming}
                 className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 max-h-32"
@@ -487,13 +572,13 @@ export default function FloatingAssistant() {
                 <button
                   onClick={() => sendMessage(input)}
                   disabled={!input.trim()}
-                  className="flex-shrink-0 w-8 h-8 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl flex items-center justify-center transition"
+                  className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-40 text-white rounded-xl flex items-center justify-center transition"
                 >
                   <Send size={14} />
                 </button>
               )}
             </div>
-            <p className="text-xs text-slate-300 mt-1.5 text-center">Enter para enviar · Shift+Enter para nova linha</p>
+            <p className="text-[10px] text-slate-300 mt-1.5 text-center">Enter para enviar · O Copilot pode executar ações na plataforma</p>
           </div>
         </div>
       )}

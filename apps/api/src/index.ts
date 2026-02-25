@@ -14,6 +14,7 @@ import executionsRouter from './routes/executions'
 import aiRouter from './routes/ai'
 import adminRouter from './routes/admin'
 import flowResponsesRouter from './routes/flow-responses'
+import analyticsRouter from './routes/analytics'
 import twilioWebhook from './webhooks/twilio'
 
 const app = express()
@@ -40,6 +41,7 @@ app.use('/api/executions', executionsRouter)
 app.use('/api/ai', aiRouter)
 app.use('/api/admin', adminRouter)
 app.use('/api/flow-responses', flowResponsesRouter)
+app.use('/api/analytics', analyticsRouter)
 
 // Twilio webhooks (no auth — validated by signature)
 app.use('/webhooks/twilio', twilioWebhook)

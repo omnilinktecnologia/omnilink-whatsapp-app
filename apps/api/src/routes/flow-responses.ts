@@ -55,8 +55,9 @@ router.get('/stats', async (req, res) => {
 
 // List flow responses with contact + journey info
 router.get('/', async (req, res) => {
-  const { journey_id, contact_id, page = '1', limit = '50' } = req.query
-  const offset = (parseInt(page as string) - 1) * parseInt(limit as string)
+  const { journey_id, campaign_id, contact_id, page = '1', limit = '50' } = req.query
+  const pageSize = Math.min(parseInt(limit as string) || 50, 2000)
+  const offset = (parseInt(page as string) - 1) * pageSize
 
   let query = supabase
     .from('flow_responses')
@@ -66,9 +67,10 @@ router.get('/', async (req, res) => {
       journeys(id, name)
     `, { count: 'exact' })
     .order('received_at', { ascending: false })
-    .range(offset, offset + parseInt(limit as string) - 1)
+    .range(offset, offset + pageSize - 1)
 
   if (journey_id) query = query.eq('journey_id', journey_id)
+  if (campaign_id) query = query.eq('campaign_id', campaign_id)
   if (contact_id) query = query.eq('contact_id', contact_id)
 
   const { data, error, count } = await query

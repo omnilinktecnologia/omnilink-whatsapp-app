@@ -106,6 +106,11 @@ export const aiApi = {
   chatUrl: () => `${apiUrl}/api/ai/chat`,
 }
 
+// ── Analytics ─────────────────────────────────────────────────────────────────
+export const analyticsApi = {
+  overview: () => api.get('/api/analytics/overview').then(r => r.data),
+}
+
 // ── Admin ─────────────────────────────────────────────────────────────────────
 export const adminApi = {
   listUsers:   ()                        => api.get('/api/admin/users').then(r => r.data),
