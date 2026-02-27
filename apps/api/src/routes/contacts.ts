@@ -106,7 +106,11 @@ router.post('/import', upload.single('file'), async (req, res) => {
     .select()
 
   if (error) throw error
-  res.json({ imported: data?.length ?? 0, total_rows: rows.length })
+  res.json({
+    imported: data?.length ?? 0,
+    total_rows: rows.length,
+    contact_ids: (data ?? []).map((c: any) => c.id),
+  })
 })
 
 export default router

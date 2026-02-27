@@ -68,10 +68,50 @@ export async function handleProcessInbound(payload: ProcessInboundPayload): Prom
     const flowId    = interactiveData.flow_id    ?? interactiveData.id    ?? null
     const flowToken = interactiveData.flow_token ?? null
     const screenId  = interactiveData.screen     ?? interactiveData.screen_id ?? null
-    // The actual form field values live under `data` key
-    const responseData = interactiveData.data ?? interactiveData
 
-    console.log(`[process_inbound] Saving flow response — flow_id=${flowId} screen=${screenId} fields=${Object.keys(responseData).join(',')}`)
+    // Twilio sends WhatsApp Flow submissions as:
+    //   { type: "nfm_reply", response_json: "{\"nps\":\"5\",\"flow_token\":\"...\"}", desc: "..." }
+    // Decompose the nested response_json string if present; fall back to .data or the full object.
+    let responseData: Record<string, unknown> = interactiveData.data ?? interactiveData
+    if (typeof (interactiveData as any).response_json === 'string') {
+      try {
+        const parsed = JSON.parse((interactiveData as any).response_json)
+        if (parsed && typeof parsed === 'object') responseData = parsed
+      } catch {
+        // keep responseData as-is
+      }
+    }
+    // Strip internal Twilio meta-fields; expand one level of nested objects;
+    // shorten dotted keys (e.g. flowResponse.nps → nps) so the DB stores clean field names.
+    const META_FIELDS = new Set(['type', 'desc', 'response_json', 'flow_token'])
+
+    // Expand nested objects first
+    const rawData: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(responseData)) {
+      if (META_FIELDS.has(k)) continue
+      if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+        for (const [nk, nv] of Object.entries(v as Record<string, unknown>)) {
+          rawData[nk] = nv
+        }
+      } else {
+        rawData[k] = v
+      }
+    }
+
+    // Shorten dotted keys (e.g. flowResponse.nps → nps), fall back to full if collision
+    const seen = new Set<string>()
+    const cleanedData: Record<string, unknown> = {}
+    for (const k of Object.keys(rawData)) {
+      let sk = k
+      if (k.includes('.')) {
+        const short = k.split('.').pop()!
+        sk = seen.has(short) ? k : short
+      }
+      seen.add(sk)
+      cleanedData[sk] = rawData[k]
+    }
+
+    console.log(`[process_inbound] Saving flow response — flow_id=${flowId} screen=${screenId} fields=${Object.keys(cleanedData).join(',')}`)
 
     // Find the execution to link (if any — might not exist yet before wait_for_reply)
     const { data: activeExec } = await supabase
@@ -91,7 +131,7 @@ export async function handleProcessInbound(payload: ProcessInboundPayload): Prom
       flow_id:       flowId,
       flow_token:    flowToken,
       screen_id:     screenId,
-      response_data: responseData,
+      response_data: cleanedData,
       received_at:   received_at,
     })
   }
@@ -145,18 +185,20 @@ export async function handleProcessInbound(payload: ProcessInboundPayload): Prom
       data: { body, sid: message_sid, interactive_data: interactiveData },
     })
 
-    // Find next node after wait_for_reply
+    // Find next node after wait_for_reply — prefer main-flow edges over timeout/error handles
     const graph = (execution.journeys as any).graph
-    const nextEdge = graph?.edges?.find((e: any) => e.source === execution.current_node_id)
+    const allEdges = (graph?.edges ?? []).filter((e: any) => e.source === execution.current_node_id)
+    const nextEdge = allEdges.find((e: any) => !e.sourceHandle || e.sourceHandle === 'default')
+      ?? allEdges[0]
 
     if (nextEdge?.target) {
-      console.log(`[process_inbound] Advancing execution ${execution.id} to node ${nextEdge.target}`)
+      console.log(`[process_inbound] Advancing execution ${execution.id} from ${execution.current_node_id} → ${nextEdge.target} (handle=${nextEdge.sourceHandle ?? 'default'})`)
       await supabase
         .from('journey_executions')
         .update({ current_node_id: nextEdge.target })
         .eq('id', execution.id)
     } else {
-      console.warn(`[process_inbound] No next edge from node ${execution.current_node_id} — execution may be stuck`)
+      console.error(`[process_inbound] No outgoing edge from wait_for_reply node ${execution.current_node_id} — edges in graph: ${JSON.stringify(allEdges.map((e: any) => ({ source: e.source, target: e.target, handle: e.sourceHandle })))}`)
     }
 
     await advanceExecution(execution.id, 'reply')

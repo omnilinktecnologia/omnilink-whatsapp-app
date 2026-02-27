@@ -6,6 +6,7 @@ import { APPROVAL_LABELS } from '@/lib/utils'
 import {
   Plus, RefreshCw, FolderOpen, Cloud, Download, AlertTriangle,
   SendHorizonal, RotateCcw, Trash2, Copy, Check, Loader2,
+  BookOpen, ChevronDown, ChevronRight, ExternalLink,
 } from 'lucide-react'
 import CreateTemplateWizard from '@/components/CreateTemplateWizard'
 
@@ -94,6 +95,138 @@ function CopySid({ sid }: { sid: string }) {
     >
       {copied ? <><Check size={10} className="text-green-500" /> Copiado</> : <><Copy size={10} />{short}</>}
     </button>
+  )
+}
+
+// ── WhatsApp Flows Guide ──────────────────────────────────────────────────────
+
+const GUIDE_STEPS = [
+  {
+    title: '1. Criar o Flow no Meta Business Manager',
+    items: [
+      'Acesse business.facebook.com e selecione a sua conta.',
+      'No menu lateral, vá em "WhatsApp" → "Flows".',
+      'Clique em "Criar Flow". Escolha um nome, selecione a categoria (ex.: Cadastro, Pesquisa, Atendimento) e o idioma.',
+      'Use o editor visual para montar as telas do formulário: arraste campos de texto, múltipla escolha, data, dropdown, etc.',
+      'Cada tela gera um screen_id (visível no painel de propriedades). Anote o ID da primeira tela.',
+      'Clique em "Visualizar" para testar o preenchimento do formulário dentro do editor.',
+    ],
+  },
+  {
+    title: '2. Publicar o Flow',
+    items: [
+      'Ainda no editor de Flows da Meta, clique em "Publicar". O status mudará para "Published".',
+      'Após publicar, copie o Flow ID (exibido na URL e no topo da página do flow).',
+      'O Flow ID tem formato numérico (ex.: 1234567890123456). Ele será necessário no próximo passo.',
+    ],
+  },
+  {
+    title: '3. Criar o template tipo "WA Flow" no Omnilink',
+    items: [
+      'Aqui nesta página, clique em "Novo template" e selecione o tipo whatsapp/flows.',
+      'Preencha o Flow ID, o texto do botão (CTA que o usuário verá), e o ID da primeira tela (flow_first_page_id).',
+      'Opcionalmente adicione um subtítulo e/ou URL de mídia para header.',
+      'Avance até o final do wizard. O template será criado na Twilio Content API automaticamente.',
+    ],
+  },
+  {
+    title: '4. Enviar para aprovação',
+    items: [
+      'Após criar, o template aparecerá na lista com status "Não enviado".',
+      'Clique em "Aprovar", selecione a categoria (Marketing, Utilitário ou Autenticação) e confirme.',
+      'O template será enviado à Meta para revisão. O status mudará para "Pendente".',
+      'A aprovação costuma levar de alguns minutos a 24h. Use o botão de sincronizar para atualizar o status.',
+    ],
+  },
+  {
+    title: '5. Usar o template em jornadas ou campanhas',
+    items: [
+      'Com o template aprovado, ele estará disponível nos nós "Enviar Template" do construtor de jornadas.',
+      'Quando o contato recebe a mensagem, verá o botão do Flow. Ao clicar, o formulário abre nativamente no WhatsApp.',
+      'As respostas do formulário são salvas automaticamente e podem ser visualizadas em "Respostas de Flows".',
+    ],
+  },
+]
+
+function WhatsAppFlowsGuide() {
+  const [open, setOpen] = useState(false)
+  const [expandedStep, setExpandedStep] = useState<number | null>(null)
+
+  return (
+    <div className="mb-5">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium transition group"
+      >
+        <BookOpen size={15} />
+        <span>Como criar templates do tipo WhatsApp Flows</span>
+        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+      </button>
+
+      {open && (
+        <div className="mt-3 bg-gradient-to-br from-blue-50/80 to-indigo-50/60 border border-blue-200/70 rounded-xl p-5 space-y-1">
+          <p className="text-sm text-gray-600 mb-4">
+            Para usar WhatsApp Flows (formulários nativos dentro do WhatsApp), é necessário primeiro criá-los no Meta Business Manager
+            e depois vincular ao template nesta plataforma. Siga as etapas abaixo:
+          </p>
+
+          {GUIDE_STEPS.map((step, i) => {
+            const isExpanded = expandedStep === i
+            return (
+              <div key={i} className="bg-white/80 rounded-lg border border-blue-100/80 overflow-hidden">
+                <button
+                  className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-blue-50/50 transition"
+                  onClick={() => setExpandedStep(isExpanded ? null : i)}
+                >
+                  <span className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                    <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold shrink-0">
+                      {i + 1}
+                    </span>
+                    {step.title.replace(/^\d+\.\s*/, '')}
+                  </span>
+                  {isExpanded ? (
+                    <ChevronDown size={14} className="text-gray-400 shrink-0" />
+                  ) : (
+                    <ChevronRight size={14} className="text-gray-400 shrink-0" />
+                  )}
+                </button>
+                {isExpanded && (
+                  <div className="px-4 pb-4 pt-1">
+                    <ol className="space-y-2">
+                      {step.items.map((item, j) => (
+                        <li key={j} className="flex items-start gap-2.5 text-sm text-gray-600">
+                          <span className="text-xs font-bold text-blue-400 mt-0.5 shrink-0 w-5 text-right">{j + 1}.</span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+          <div className="flex items-center gap-3 pt-3">
+            <a
+              href="https://business.facebook.com/latest/whatsapp_manager/flows"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 bg-white px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-50 transition"
+            >
+              <ExternalLink size={12} /> Abrir Meta Business Manager
+            </a>
+            <a
+              href="https://developers.facebook.com/docs/whatsapp/flows"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 bg-white px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition"
+            >
+              <ExternalLink size={12} /> Documentação oficial (Meta)
+            </a>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -269,6 +402,9 @@ export default function TemplatesPage() {
           <AlertTriangle size={13} /> Erro ao buscar da Twilio: {twilioError}
         </div>
       )}
+
+      {/* ── WhatsApp Flows guide ────────────────────────────────── */}
+      <WhatsAppFlowsGuide />
 
       {/* ── Wizard ───────────────────────────────────────────────── */}
       {showForm && (

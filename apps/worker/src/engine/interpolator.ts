@@ -39,18 +39,25 @@ export function evaluateCondition(expression: string, ctx: ExecutionContext): bo
     const lNum = parseFloat(l)
     const rNum = parseFloat(r)
 
+    let result: boolean
     switch (op) {
-      case '==': return l === r || (!isNaN(lNum) && !isNaN(rNum) && lNum === rNum)
-      case '!=': return l !== r
-      case '>=': return !isNaN(lNum) && !isNaN(rNum) ? lNum >= rNum : l >= r
-      case '<=': return !isNaN(lNum) && !isNaN(rNum) ? lNum <= rNum : l <= r
-      case '>':  return !isNaN(lNum) && !isNaN(rNum) ? lNum > rNum  : l > r
-      case '<':  return !isNaN(lNum) && !isNaN(rNum) ? lNum < rNum  : l < r
-      case 'contains':    return l.includes(r)
-      case 'starts_with': return l.startsWith(r)
+      case '==': result = l === r || (!isNaN(lNum) && !isNaN(rNum) && lNum === rNum); break
+      case '!=': result = l !== r; break
+      case '>=': result = !isNaN(lNum) && !isNaN(rNum) ? lNum >= rNum : l >= r; break
+      case '<=': result = !isNaN(lNum) && !isNaN(rNum) ? lNum <= rNum : l <= r; break
+      case '>':  result = !isNaN(lNum) && !isNaN(rNum) ? lNum > rNum  : l > r; break
+      case '<':  result = !isNaN(lNum) && !isNaN(rNum) ? lNum < rNum  : l < r; break
+      case 'contains':    result = l.includes(r); break
+      case 'starts_with': result = l.startsWith(r); break
+      default: result = false
     }
+
+    console.log(`[condition] "${expression}" → resolved="${resolved}" | l="${l}" ${op} r="${r}" → ${result}`)
+    return result
   }
 
   // Truthy check fallback
-  return resolved !== '' && resolved !== '0' && resolved.toLowerCase() !== 'false'
+  const truthyResult = resolved !== '' && resolved !== '0' && resolved.toLowerCase() !== 'false'
+  console.log(`[condition] "${expression}" → resolved="${resolved}" → truthy=${truthyResult}`)
+  return truthyResult
 }

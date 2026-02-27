@@ -1,10 +1,217 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { contactsApi } from '@/lib/api'
+import { contactsApi, listsApi } from '@/lib/api'
 import { useForm } from 'react-hook-form'
 import { formatDate, formatPhone } from '@/lib/utils'
-import { Plus, Upload, Users } from 'lucide-react'
+import { Plus, Upload, Users, CheckCircle, List, Loader2, X } from 'lucide-react'
+
+// ── Import result modal ────────────────────────────────────────────────────────
+
+type ImportResult = {
+  imported: number
+  total_rows: number
+  contact_ids: string[]
+}
+
+function ImportResultModal({
+  result,
+  onClose,
+  onDone,
+}: {
+  result: ImportResult
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [lists, setLists] = useState<{ id: string; name: string }[]>([])
+  const [selectedList, setSelectedList] = useState('')
+  const [newListName, setNewListName] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [assigning, setAssigning] = useState(false)
+  const [done, setDone] = useState(false)
+  const [mode, setMode] = useState<'choose' | 'new'>('choose')
+
+  useEffect(() => {
+    listsApi.list().then(setLists).catch(() => {})
+  }, [])
+
+  async function handleAssign() {
+    if (result.contact_ids.length === 0) return
+    setAssigning(true)
+    try {
+      let listId = selectedList
+
+      if (mode === 'new' && newListName.trim()) {
+        setCreating(true)
+        const created = await listsApi.create({ name: newListName.trim() })
+        listId = created.id
+        setCreating(false)
+      }
+
+      if (!listId) return
+
+      await listsApi.addMembers(listId, result.contact_ids)
+      setDone(true)
+    } catch (err: any) {
+      alert('Erro ao associar: ' + (err.response?.data?.error ?? err.message))
+    } finally {
+      setAssigning(false)
+    }
+  }
+
+  function handleSkip() {
+    onDone()
+    onClose()
+  }
+
+  function handleFinish() {
+    onDone()
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+        {/* Header */}
+        <div className="px-6 pt-6 pb-4">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+              <CheckCircle size={20} className="text-green-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900 text-lg">Importação concluída</h3>
+              <p className="text-sm text-gray-500">
+                {result.imported} contato{result.imported !== 1 ? 's' : ''} importado{result.imported !== 1 ? 's' : ''} de {result.total_rows} linha{result.total_rows !== 1 ? 's' : ''}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {!done ? (
+          <>
+            {/* Question */}
+            <div className="px-6 pb-4">
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <List size={15} className="text-blue-600" />
+                  <span className="text-sm font-semibold text-blue-900">Associar a uma lista?</span>
+                </div>
+                <p className="text-xs text-blue-700">
+                  Vincule os {result.imported} contatos importados a uma lista para facilitar o envio de campanhas.
+                </p>
+              </div>
+            </div>
+
+            {/* Options */}
+            <div className="px-6 pb-4 space-y-3">
+              {/* Existing list */}
+              <label
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition ${
+                  mode === 'choose' ? 'border-blue-500 bg-blue-50/50' : 'border-gray-200 hover:bg-gray-50'
+                }`}
+                onClick={() => setMode('choose')}
+              >
+                <input
+                  type="radio"
+                  name="listMode"
+                  checked={mode === 'choose'}
+                  onChange={() => setMode('choose')}
+                  className="accent-blue-600"
+                />
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium text-gray-700">Lista existente</span>
+                  {mode === 'choose' && (
+                    <select
+                      value={selectedList}
+                      onChange={e => setSelectedList(e.target.value)}
+                      className="mt-2 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <option value="">Selecione uma lista...</option>
+                      {lists.map(l => (
+                        <option key={l.id} value={l.id}>{l.name}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </label>
+
+              {/* New list */}
+              <label
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition ${
+                  mode === 'new' ? 'border-blue-500 bg-blue-50/50' : 'border-gray-200 hover:bg-gray-50'
+                }`}
+                onClick={() => setMode('new')}
+              >
+                <input
+                  type="radio"
+                  name="listMode"
+                  checked={mode === 'new'}
+                  onChange={() => setMode('new')}
+                  className="accent-blue-600"
+                />
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium text-gray-700">Criar nova lista</span>
+                  {mode === 'new' && (
+                    <input
+                      value={newListName}
+                      onChange={e => setNewListName(e.target.value)}
+                      placeholder="Nome da nova lista..."
+                      className="mt-2 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onClick={e => e.stopPropagation()}
+                    />
+                  )}
+                </div>
+              </label>
+            </div>
+
+            {/* Actions */}
+            <div className="px-6 pb-6 flex gap-2">
+              <button
+                onClick={handleSkip}
+                className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50 transition"
+              >
+                Pular
+              </button>
+              <button
+                onClick={handleAssign}
+                disabled={assigning || (mode === 'choose' && !selectedList) || (mode === 'new' && !newListName.trim())}
+                className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center gap-2"
+              >
+                {assigning ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    {creating ? 'Criando lista...' : 'Associando...'}
+                  </>
+                ) : (
+                  <>Associar {result.imported} contatos</>
+                )}
+              </button>
+            </div>
+          </>
+        ) : (
+          /* Done state */
+          <div className="px-6 pb-6">
+            <div className="bg-green-50 border border-green-100 rounded-xl p-4 mb-4 text-center">
+              <CheckCircle size={24} className="mx-auto text-green-600 mb-2" />
+              <p className="text-sm font-medium text-green-800">
+                {result.imported} contatos associados à lista com sucesso!
+              </p>
+            </div>
+            <button
+              onClick={handleFinish}
+              className="w-full bg-blue-600 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition"
+            >
+              Concluir
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function ContactsPage() {
   const [contacts, setContacts] = useState<any[]>([])
@@ -15,6 +222,7 @@ export default function ContactsPage() {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<any>(null)
   const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm()
 
@@ -55,8 +263,7 @@ export default function ContactsPage() {
     setImporting(true)
     try {
       const res = await contactsApi.import(file)
-      alert(`Importados: ${res.imported} de ${res.total_rows} linhas`)
-      await load()
+      setImportResult(res)
     } catch (err: any) {
       alert('Erro na importação: ' + (err.response?.data?.error ?? err.message))
     } finally {
@@ -122,6 +329,15 @@ export default function ContactsPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Import result → associate to list */}
+      {importResult && (
+        <ImportResultModal
+          result={importResult}
+          onClose={() => setImportResult(null)}
+          onDone={() => load()}
+        />
       )}
 
       {loading ? (

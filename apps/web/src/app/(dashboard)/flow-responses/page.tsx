@@ -38,6 +38,61 @@ type CampaignStat = {
 type View = 'analytics' | 'list' | 'campaigns'
 
 // ─────────────────────────────────────────────────────────────────────────────
+// JSON decomposer — mirrors server logic so legacy records display correctly
+// ─────────────────────────────────────────────────────────────────────────────
+
+const META_FIELDS = new Set(['type', 'desc', 'response_json', 'flow_token'])
+
+/** Simplify a dotted key to its last segment, e.g. "flowResponse.nps" → "nps".
+ *  Falls back to the full key if the short form would collide with an existing key. */
+function shortKey(key: string, existingKeys: Set<string>): string {
+  if (!key.includes('.')) return key
+  const short = key.split('.').pop()!
+  return existingKeys.has(short) ? key : short
+}
+
+/** Extract the real user-filled fields from a response_data object.
+ *  - Handles Twilio's nested `response_json` string wrapper.
+ *  - Expands nested objects (e.g. `flowResponse: { nps: "5" }` → `{ nps: "5" }`).
+ *  - Strips dotted-key prefixes (e.g. `flowResponse.nps` → `nps`).
+ */
+function flattenResponseData(rd: Record<string, unknown>): Record<string, unknown> {
+  // If there's a response_json string, recurse into it
+  if (typeof rd['response_json'] === 'string') {
+    try {
+      const parsed = JSON.parse(rd['response_json'] as string)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return flattenResponseData(parsed as Record<string, unknown>)
+      }
+    } catch { /* fall through */ }
+  }
+
+  // First pass: collect all non-meta fields, expanding nested objects
+  const raw: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(rd)) {
+    if (META_FIELDS.has(k)) continue
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      // Expand one level of nesting
+      for (const [nk, nv] of Object.entries(v as Record<string, unknown>)) {
+        raw[nk] = nv
+      }
+    } else {
+      raw[k] = v
+    }
+  }
+
+  // Second pass: shorten dotted keys (e.g. flowResponse.nps → nps)
+  const shortKeys = new Set<string>()
+  const out: Record<string, unknown> = {}
+  for (const k of Object.keys(raw)) {
+    const sk = shortKey(k, shortKeys)
+    shortKeys.add(sk)
+    out[sk] = raw[k]
+  }
+  return out
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Interactive JSON Viewer
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -253,7 +308,7 @@ function ResponseRow({ r, onDelete }: { r: FlowResponse; onDelete: () => void })
 
       {expanded && (
         <div className="px-5 pb-4 pt-1 bg-gradient-to-b from-slate-50 to-white border-t border-gray-100">
-          <InteractiveResponseViewer data={r.response_data ?? {}} />
+          <InteractiveResponseViewer data={flattenResponseData(r.response_data ?? {})} />
         </div>
       )}
     </div>
@@ -362,7 +417,7 @@ function analyzeFields(responses: FlowResponse[]): FieldAnalysis[] {
 
   const fieldMap = new Map<string, unknown[]>()
   for (const r of responses) {
-    for (const [k, v] of Object.entries(r.response_data ?? {})) {
+    for (const [k, v] of Object.entries(flattenResponseData(r.response_data ?? {}))) {
       if (!fieldMap.has(k)) fieldMap.set(k, [])
       fieldMap.get(k)!.push(v)
     }
@@ -528,8 +583,9 @@ function CrossTabView({ responses, fields }: { responses: FlowResponse[]; fields
   const matrix: Record<string, Record<string, number>> = {}
 
   for (const r of responses) {
-    const a = String(r.response_data?.[fieldA] ?? '')
-    const b = String(r.response_data?.[fieldB] ?? '')
+    const flat = flattenResponseData(r.response_data ?? {})
+    const a = String(flat[fieldA] ?? '')
+    const b = String(flat[fieldB] ?? '')
     if (!a || !b) continue
     rowVals.add(a)
     colVals.add(b)
@@ -679,12 +735,14 @@ function AnalyticsView({ responses, loading }: { responses: FlowResponse[]; load
 function exportCSV(responses: FlowResponse[]) {
   if (responses.length === 0) return
   const allKeys = new Set<string>()
-  for (const r of responses) {
-    for (const k of Object.keys(r.response_data ?? {})) allKeys.add(k)
+  const flatRows = responses.map(r => flattenResponseData(r.response_data ?? {}))
+  for (const flat of flatRows) {
+    for (const k of Object.keys(flat)) allKeys.add(k)
   }
   const fields = Array.from(allKeys).sort()
   const header = ['contato', 'telefone', 'jornada', 'recebido_em', ...fields]
-  const rows = responses.map(r => {
+  const rows = responses.map((r, i) => {
+    const flat = flatRows[i]
     const base = [
       r.contacts?.name ?? '',
       r.contacts?.phone ?? '',
@@ -692,7 +750,7 @@ function exportCSV(responses: FlowResponse[]) {
       r.received_at ?? '',
     ]
     const vals = fields.map(f => {
-      const v = (r.response_data ?? {})[f]
+      const v = flat[f]
       return typeof v === 'object' ? JSON.stringify(v) : String(v ?? '')
     })
     return [...base, ...vals]
@@ -704,6 +762,35 @@ function exportCSV(responses: FlowResponse[]) {
   const a = document.createElement('a')
   a.href = url
   a.download = `respostas-flows-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function exportCampaignStatsCSV(stats: CampaignStat[]) {
+  if (stats.length === 0) return
+  // Rows: campanha, campo, valor, contagem, percentual
+  const header = ['campanha', 'campo', 'valor', 'contagem', 'percentual']
+  const rows: string[][] = []
+  for (const stat of stats) {
+    for (const [fieldName, valueCounts] of Object.entries(stat.fields)) {
+      const total = Object.values(valueCounts).reduce((s, c) => s + c, 0)
+      for (const [val, cnt] of Object.entries(valueCounts).sort((a, b) => b[1] - a[1])) {
+        rows.push([
+          stat.campaign_name,
+          fieldName,
+          val,
+          String(cnt),
+          total > 0 ? `${((cnt / total) * 100).toFixed(1)}%` : '0%',
+        ])
+      }
+    }
+  }
+  const csv = [header, ...rows].map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `resultados-campanhas-${new Date().toISOString().slice(0, 10)}.csv`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -828,7 +915,23 @@ export default function FlowResponsesPage() {
               onClick={() => exportCSV(analyticsResponses)}
               className="flex items-center gap-1.5 border border-gray-200 bg-white text-gray-600 px-3 py-2 rounded-lg text-sm hover:bg-gray-50 transition"
             >
-              <Download size={14} /> CSV
+              <Download size={14} /> Exportar CSV
+            </button>
+          )}
+          {view === 'campaigns' && visibleStats.length > 0 && (
+            <button
+              onClick={() => exportCampaignStatsCSV(visibleStats)}
+              className="flex items-center gap-1.5 border border-gray-200 bg-white text-gray-600 px-3 py-2 rounded-lg text-sm hover:bg-gray-50 transition"
+            >
+              <Download size={14} /> Exportar CSV
+            </button>
+          )}
+          {view === 'list' && responses.length > 0 && (
+            <button
+              onClick={() => exportCSV(responses)}
+              className="flex items-center gap-1.5 border border-gray-200 bg-white text-gray-600 px-3 py-2 rounded-lg text-sm hover:bg-gray-50 transition"
+            >
+              <Download size={14} /> Exportar CSV
             </button>
           )}
           <button

@@ -32,6 +32,53 @@ router.get('/stats', async (req, res) => {
     fields: Record<string, Record<string, number>>
   }>()
 
+  const META_FIELDS = new Set(['type', 'desc', 'response_json', 'flow_token'])
+
+  function shortKey(key: string, existing: Set<string>): string {
+    if (!key.includes('.')) return key
+    const short = key.split('.').pop()!
+    return existing.has(short) ? key : short
+  }
+
+  /** Flatten a response_data object.
+   *  - Recurses into `response_json` string wrapper (Twilio legacy format).
+   *  - Expands one level of nested objects (e.g. flowResponse: { nps: "5" } → { nps: "5" }).
+   *  - Shortens dotted keys to their last segment (e.g. flowResponse.nps → nps).
+   */
+  function flattenResponseData(rd: Record<string, unknown>): Record<string, string> {
+    if (typeof rd['response_json'] === 'string') {
+      try {
+        const parsed = JSON.parse(rd['response_json'] as string)
+        if (parsed && typeof parsed === 'object') {
+          return flattenResponseData(parsed as Record<string, unknown>)
+        }
+      } catch { /* fall through */ }
+    }
+
+    // First pass: expand nested objects
+    const raw: Record<string, string> = {}
+    for (const [key, val] of Object.entries(rd)) {
+      if (META_FIELDS.has(key)) continue
+      if (typeof val === 'object' && val !== null) {
+        for (const [nk, nv] of Object.entries(val as Record<string, unknown>)) {
+          raw[nk] = String(nv ?? '')
+        }
+      } else {
+        raw[key] = String(val ?? '')
+      }
+    }
+
+    // Second pass: shorten dotted keys
+    const seen = new Set<string>()
+    const out: Record<string, string> = {}
+    for (const k of Object.keys(raw)) {
+      const sk = shortKey(k, seen)
+      seen.add(sk)
+      out[sk] = raw[k]
+    }
+    return out
+  }
+
   for (const row of (data ?? []) as any[]) {
     const cid   = row.campaign_id
     const cname = row.campaigns?.name ?? cid
@@ -42,9 +89,8 @@ router.get('/stats', async (req, res) => {
     const entry = campaignMap.get(cid)!
     entry.total++
 
-    const rd = (row.response_data ?? {}) as Record<string, unknown>
-    for (const [key, val] of Object.entries(rd)) {
-      const strVal = typeof val === 'object' ? JSON.stringify(val) : String(val ?? '')
+    const rd = flattenResponseData((row.response_data ?? {}) as Record<string, unknown>)
+    for (const [key, strVal] of Object.entries(rd)) {
       if (!entry.fields[key]) entry.fields[key] = {}
       entry.fields[key][strVal] = (entry.fields[key][strVal] ?? 0) + 1
     }
